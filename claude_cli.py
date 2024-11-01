@@ -3,6 +3,7 @@ import os
 import click
 from anthropic import Anthropic
 import re
+import sys
 
 class ChatSession:
     def __init__(self, api_key: str, model: str, preserve_context: bool) -> None:
@@ -53,6 +54,27 @@ def save_to_file(content: str, file_path: str) -> None:
     except Exception as e:
         click.echo(f"Error saving to file: {str(e)}")
 
+def get_multiline_input() -> str:
+    """Get multiline input from the user until they press Ctrl+D/Z or enter two blank lines."""
+    click.echo("Enter your message (press Ctrl+D or Ctrl+Z to finish, or enter two blank lines):")
+    lines = []
+    blank_line_count = 0
+    
+    while True:
+        try:
+            line = input()
+            if not line:
+                blank_line_count += 1
+                if blank_line_count >= 2:
+                    break
+            else:
+                blank_line_count = 0
+            lines.append(line)
+        except EOFError:
+            break
+    
+    return '\n'.join(lines).strip()
+
 @click.command()
 @click.option('--api-key', help='Anthropic API Key (optional)')
 @click.option('--model', default='claude-3-5-sonnet-latest', help='Anthropic model to use (default: claude-3-5-sonnet-latest)')
@@ -96,6 +118,7 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[st
     # Interactive mode
     click.echo(f"Welcome to Anthropic CLI Chat (Model: {model})")
     click.echo("Type 'exit' or press Ctrl+C to quit.")
+    click.echo("Type '/m' for multiline input mode")
     click.echo("To save code, use: /save <filename>")
 
     try:
@@ -105,20 +128,18 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[st
                 if user_input.lower() in ['exit', 'quit', 'q']:
                     break
 
+                if user_input == '/m':
+                    user_input = get_multiline_input()
+                    if not user_input:  # Skip empty input
+                        continue
+
                 if user_input.startswith('/save '):
                     filename = user_input.split(' ', 1)[1]
-                    click.echo(f"Enter your prompt for code generation (press Ctrl+D or Ctrl+Z when done):")
-                    lines = []
-                    while True:
-                        try:
-                            line = input()
-                            lines.append(line)
-                        except EOFError:
-                            break
-                    prompt = '\n'.join(lines)
-                    response = chat_session.send_message(prompt, code_output=True)
-                    save_to_file(response, filename)
-                    click.echo(f"Code saved to {filename}")
+                    prompt = get_multiline_input()
+                    if prompt:
+                        response = chat_session.send_message(prompt, code_output=True)
+                        save_to_file(response, filename)
+                        click.echo(f"Code saved to {filename}")
                 else:
                     response = chat_session.send_message(user_input)
                     click.echo(f"Claude: {response}")
