@@ -138,7 +138,7 @@ def save_to_file(content: str, file_path: Path) -> None:
         click.echo(f"Error saving to file: {str(e)}")
 
 def handle_script_output(response: str, script_output: Path) -> None:
-    """Handle extracting and saving code blocks from the response with improved backtick handling."""
+    """Handle extracting and saving code blocks from the response."""
     try:
         code_blocks = extract_code_blocks(response)
 
@@ -146,35 +146,20 @@ def handle_script_output(response: str, script_output: Path) -> None:
             click.echo("No valid code blocks found in the response.")
             return
 
-        if len(code_blocks) == 1:
-            # Single code block case
-            code_content = code_blocks[0]
-            if validate_code_block(code_content):
-                save_to_file(code_content, script_output)
-                click.echo(f"Script saved to {script_output}")
-            else:
-                click.echo("Extracted code block appears invalid.")
-        else:
-            # Multiple code blocks case
-            valid_blocks = [block for block in code_blocks if validate_code_block(block)]
+        # Filter for valid code blocks
+        valid_blocks = [block for block in code_blocks if validate_code_block(block)]
 
-            if not valid_blocks:
-                click.echo("No valid code blocks found in the response.")
-                return
+        if not valid_blocks:
+            click.echo("No valid code blocks found in the response.")
+            return
 
-            if len(valid_blocks) == 1:
-                save_to_file(valid_blocks[0], script_output)
-                click.echo(f"Script saved to {script_output}")
-            else:
-                # Handle multiple valid code blocks
-                base_path = script_output.parent
-                stem = script_output.stem
-                suffix = script_output.suffix
+        # Combine all valid code blocks with separators
+        combined_code = "\n\n# ===== Code Block Separator =====\n\n".join(valid_blocks)
 
-                for i, block in enumerate(valid_blocks, 1):
-                    output_path = base_path / f"{stem}_{i}{suffix}"
-                    save_to_file(block, output_path)
-                    click.echo(f"Script part {i} saved to {output_path}")
+        # Save combined code to single file
+        save_to_file(combined_code, script_output)
+        click.echo(f"Script saved to {script_output}")
+
     except Exception as e:
         click.echo(f"Error processing script output: {str(e)}")
 
