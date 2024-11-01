@@ -17,8 +17,9 @@ A command-line interface for interacting with Anthropic's Claude AI models. This
 ## Installation
 
 1. Clone this repository
-2. Install requirements:
-pip install anthropic click
+
+2. Install requirements using the provided requirements.txt:
+pip install -r requirements.txt
 
 3. Set your Anthropic API key as an environment variable (optional):
 export ANTHROPIC_API_KEY='your-api-key'
@@ -63,8 +64,7 @@ python claude_cli.py --model claude-3-opus-20240229
 ## Requirements
 
 - Python 3.6+
-- anthropic
-- click
+- Requirements are listed in requirements.txt and can be installed via pip
 
 ## Error Handling
 
