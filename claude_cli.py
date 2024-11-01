@@ -2,6 +2,7 @@ from typing import List, Optional
 import os
 import click
 from anthropic import Anthropic
+import re
 
 class ChatSession:
     def __init__(self, api_key: str, model: str, preserve_context: bool) -> None:
@@ -10,11 +11,14 @@ class ChatSession:
         self.preserve_context = preserve_context
         self.conversation_history: List[str] = []
 
-    def send_message(self, message: str, context: Optional[str] = None) -> str:
+    def send_message(self, message: str, context: Optional[str] = None, code_output: bool = False) -> str:
         try:
             full_prompt = message
             if context:
                 full_prompt = f"Context:\n{context}\n\nQuestion/Instruction:\n{message}"
+
+            if code_output:
+                full_prompt = f"{full_prompt}\n\nPlease provide the complete code file/content. Do not include any explanations or markdown formatting - return only the actual file content that should be saved."
 
             if self.preserve_context and self.conversation_history:
                 full_prompt = "\n".join(self.conversation_history + [full_prompt])
@@ -24,6 +28,11 @@ class ChatSession:
                 max_tokens=4096,
                 messages=[{"role": "user", "content": full_prompt}])
             ai_response = response.content[0].text
+
+            if code_output:
+                # Remove markdown code blocks if present
+                ai_response = re.sub(r'^```[\w]*\n|```$', '', ai_response, flags=re.MULTILINE).strip()
+
             if self.preserve_context:
                 self.conversation_history.extend([full_prompt, ai_response])
             return ai_response
@@ -39,6 +48,7 @@ def process_file(file_path: str) -> str:
 
 def save_to_file(content: str, file_path: str) -> None:
     try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
     except Exception as e:
@@ -51,8 +61,9 @@ def save_to_file(content: str, file_path: str) -> None:
 @click.option('--file', type=click.Path(exists=True), help='Path to input file')
 @click.option('--prompt', help='Prompt to send to Claude')
 @click.option('--output', type=click.Path(), help='Path to output file for saving responses')
+@click.option('--code-file', type=click.Path(), help='Path to save generated code/content (strips markdown)')
 def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[str],
-         prompt: Optional[str], output: Optional[str]) -> None:
+         prompt: Optional[str], output: Optional[str], code_file: Optional[str]) -> None:
     anthropic_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
     if not anthropic_key:
         anthropic_key = click.prompt('Please enter your Anthropic API Key', hide_input=True)
@@ -65,31 +76,53 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[st
         file_content = process_file(file)
 
     if prompt or file:
+        code_output = bool(code_file)
         if prompt and not file:
-            response = chat_session.send_message(prompt)
+            response = chat_session.send_message(prompt, code_output=code_output)
         elif file and not prompt:
-            response = chat_session.send_message(file_content)
+            response = chat_session.send_message(file_content, code_output=code_output)
         else:
-            response = chat_session.send_message(prompt, context=file_content)
+            response = chat_session.send_message(prompt, context=file_content, code_output=code_output)
 
+        if code_file:
+            save_to_file(response, code_file)
+            click.echo(f"Code saved to {code_file}")
         if output:
             save_to_file(response, output)
             click.echo(f"Response saved to {output}")
-        else:
+        if not output and not code_file:
             click.echo(f"Claude: {response}")
         return
 
     # Interactive mode
     click.echo(f"Welcome to Anthropic CLI Chat (Model: {model})")
     click.echo("Type 'exit' or press Ctrl+C to quit.")
+    click.echo("To save code, use: /save <filename>")
+
     try:
         while True:
             try:
                 user_input = input("You: ")
                 if user_input.lower() in ['exit', 'quit', 'q']:
                     break
-                response = chat_session.send_message(user_input)
-                click.echo(f"Claude: {response}")
+
+                if user_input.startswith('/save '):
+                    filename = user_input.split(' ', 1)[1]
+                    click.echo(f"Enter your prompt for code generation (press Ctrl+D or Ctrl+Z when done):")
+                    lines = []
+                    while True:
+                        try:
+                            line = input()
+                            lines.append(line)
+                        except EOFError:
+                            break
+                    prompt = '\n'.join(lines)
+                    response = chat_session.send_message(prompt, code_output=True)
+                    save_to_file(response, filename)
+                    click.echo(f"Code saved to {filename}")
+                else:
+                    response = chat_session.send_message(user_input)
+                    click.echo(f"Claude: {response}")
             except KeyboardInterrupt:
                 break
     except Exception as e:
