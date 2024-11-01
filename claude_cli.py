@@ -17,8 +17,14 @@ class ChatSession:
             full_prompt = message
             if context:
                 full_prompt = f"Context:\n{context}\n\nQuestion/Instruction:\n{message}"
+
+            # Add script return instruction if script output is requested
+            if '--script-output' in sys.argv:
+                full_prompt += "\n\nPlease return the complete script in its entirety within triple backticks (```). Include all necessary imports, functions, and code blocks."
+
             if self.preserve_context and self.conversation_history:
                 full_prompt = "\n".join(self.conversation_history + [full_prompt])
+
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=4096,
