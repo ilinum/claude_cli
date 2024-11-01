@@ -39,7 +39,7 @@ def process_file(file_path: Path) -> str:
 
 @click.command()
 @click.option('--api-key', help='Anthropic API Key (optional)')
-@click.option('--model', default='claude-3-sonnet-latest', help='Anthropic model to use (default: claude-3-sonnet-latest)')
+@click.option('--model', default='claude-3-sonnet-20240229', help='Anthropic model to use (default: claude-3-sonnet-20240229)')
 @click.option('--no-context', is_flag=True, help='Disable preserving conversation context')
 @click.option('--file', type=click.Path(exists=True, path_type=Path), help='Path to input file')
 @click.option('--prompt', help='Prompt to send to Claude')
