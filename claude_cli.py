@@ -37,6 +37,13 @@ def process_file(file_path: Path) -> str:
     except Exception as e:
         return f"Error reading file: {str(e)}"
 
+def save_to_file(content: str, file_path: Path) -> None:
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+    except Exception as e:
+        click.echo(f"Error saving to file: {str(e)}")
+
 @click.command()
 @click.option('--api-key', help='Anthropic API Key (optional)')
 @click.option('--model', default='claude-3-5-sonnet-latest', help='Anthropic model to use (default: claude-3-5-sonnet-latest)')
@@ -44,8 +51,9 @@ def process_file(file_path: Path) -> str:
 @click.option('--file', type=click.Path(exists=True, path_type=Path), help='Path to input file')
 @click.option('--prompt', help='Prompt to send to Claude')
 @click.option('--output', type=click.Path(path_type=Path), help='Path to output file for saving responses')
+@click.option('--script-output', type=click.Path(path_type=Path), help='Path to save generated script')
 def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[Path],
-         prompt: Optional[str], output: Optional[Path]) -> None:
+         prompt: Optional[str], output: Optional[Path], script_output: Optional[Path]) -> None:
     anthropic_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
     if not anthropic_key:
         anthropic_key = click.prompt('Please enter your Anthropic API Key', hide_input=True)
@@ -77,6 +85,22 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[Pa
                 click.echo(f"Error saving response: {str(e)}")
         else:
             click.echo(f"Claude: {response}")
+
+        # Save script if it looks like code and script_output is specified
+        if script_output and "```" in response:
+            try:
+                # Extract code between triple backticks
+                code_blocks = response.split("```")
+                if len(code_blocks) > 1:
+                    # Get the code content (usually the second element)
+                    code_content = code_blocks[1]
+                    # Remove language identifier if present
+                    if '\n' in code_content:
+                        code_content = code_content.split('\n', 1)[1]
+                    save_to_file(code_content, script_output)
+                    click.echo(f"Script saved to {script_output}")
+            except Exception as e:
+                click.echo(f"Error saving script: {str(e)}")
         return
 
     # Interactive mode
@@ -90,6 +114,22 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[Pa
                     break
                 response = chat_session.send_message(user_input)
                 click.echo(f"Claude: {response}")
+
+                # Save script if it looks like code and script_output is specified
+                if script_output and "```" in response:
+                    try:
+                        # Extract code between triple backticks
+                        code_blocks = response.split("```")
+                        if len(code_blocks) > 1:
+                            # Get the code content (usually the second element)
+                            code_content = code_blocks[1]
+                            # Remove language identifier if present
+                            if '\n' in code_content:
+                                code_content = code_content.split('\n', 1)[1]
+                            save_to_file(code_content, script_output)
+                            click.echo(f"Script saved to {script_output}")
+                    except Exception as e:
+                        click.echo(f"Error saving script: {str(e)}")
             except KeyboardInterrupt:
                 break
     except Exception as e:
