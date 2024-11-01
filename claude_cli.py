@@ -48,7 +48,6 @@ def process_file(file_path: str) -> str:
 
 def save_to_file(content: str, file_path: str) -> None:
     try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
     except Exception as e:
