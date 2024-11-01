@@ -12,18 +12,20 @@ class ChatSession:
         self.preserve_context = preserve_context
         self.conversation_history: List[str] = []
 
-    def send_message(self, message: str) -> str:
+    def send_message(self, message: str, context: Optional[str] = None) -> str:
         try:
             full_prompt = message
+            if context:
+                full_prompt = f"Context:\n{context}\n\nQuestion/Instruction:\n{message}"
             if self.preserve_context and self.conversation_history:
-                full_prompt = "\n".join(self.conversation_history + [message])
+                full_prompt = "\n".join(self.conversation_history + [full_prompt])
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=4096,
                 messages=[{"role": "user", "content": full_prompt}])
             ai_response = response.content[0].text
             if self.preserve_context:
-                self.conversation_history.extend([message, ai_response])
+                self.conversation_history.extend([full_prompt, ai_response])
             return ai_response
         except Exception as e:
             return f"An error occurred: {str(e)}"
@@ -40,16 +42,32 @@ def process_file(file_path: Path) -> str:
 @click.option('--model', default='claude-3-sonnet-latest', help='Anthropic model to use (default: claude-3-sonnet-latest)')
 @click.option('--no-context', is_flag=True, help='Disable preserving conversation context')
 @click.option('--file', type=click.Path(exists=True, path_type=Path), help='Path to input file')
+@click.option('--prompt', help='Prompt to send to Claude')
 @click.option('--output', type=click.Path(path_type=Path), help='Path to output file for saving responses')
-def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[Path], output: Optional[Path]) -> None:
+def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[Path],
+         prompt: Optional[str], output: Optional[Path]) -> None:
     anthropic_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
     if not anthropic_key:
         anthropic_key = click.prompt('Please enter your Anthropic API Key', hide_input=True)
+
     preserve_context = not no_context
     chat_session = ChatSession(api_key=anthropic_key, model=model, preserve_context=preserve_context)
+
+    file_content = None
     if file:
-        content = process_file(file)
-        response = chat_session.send_message(content)
+        file_content = process_file(file)
+
+    if prompt or file:
+        if prompt and not file:
+            # Only prompt provided
+            response = chat_session.send_message(prompt)
+        elif file and not prompt:
+            # Only file provided
+            response = chat_session.send_message(file_content)
+        else:
+            # Both file and prompt provided
+            response = chat_session.send_message(prompt, context=file_content)
+
         if output:
             try:
                 with open(output, 'w', encoding='utf-8') as f:
@@ -60,6 +78,8 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[Pa
         else:
             click.echo(f"Claude: {response}")
         return
+
+    # Interactive mode
     click.echo(f"Welcome to Anthropic CLI Chat (Model: {model})")
     click.echo("Type 'exit' or press Ctrl+C to quit.")
     try:
