@@ -4,6 +4,7 @@ import sys
 import click
 from anthropic import Anthropic
 from pathlib import Path
+import re
 
 class ChatSession:
     def __init__(self, api_key: str, model: str, preserve_context: bool) -> None:
@@ -36,6 +37,35 @@ class ChatSession:
         except Exception as e:
             return f"An error occurred: {str(e)}"
 
+def extract_code_blocks(text: str) -> List[str]:
+    """Extract code blocks from text containing triple backticks."""
+    # Pattern matches content between triple backticks, including language identifier
+    pattern = r"```(?:\w*\n)?(.*?)```"
+    # re.DOTALL allows matching across multiple lines
+    matches = re.findall(pattern, text, re.DOTALL)
+    # Strip leading/trailing whitespace from each block
+    return [block.strip() for block in matches]
+
+def validate_code_block(code: str) -> bool:
+    """Basic validation of code block."""
+    if not code:
+        return False
+
+    # Check for some basic Python syntax indicators
+    basic_indicators = [
+        'def ',
+        'import ',
+        'class ',
+        '= ',
+        'print(',
+        'return ',
+        'if ',
+        'for ',
+        'while '
+    ]
+
+    return any(indicator in code for indicator in basic_indicators)
+
 def process_file(file_path: Path) -> str:
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -49,6 +79,47 @@ def save_to_file(content: str, file_path: Path) -> None:
             f.write(content)
     except Exception as e:
         click.echo(f"Error saving to file: {str(e)}")
+
+def handle_script_output(response: str, script_output: Path) -> None:
+    """Handle extracting and saving code blocks from the response."""
+    try:
+        code_blocks = extract_code_blocks(response)
+
+        if not code_blocks:
+            click.echo("No valid code blocks found in the response.")
+            return
+
+        if len(code_blocks) == 1:
+            # Single code block case
+            code_content = code_blocks[0]
+            if validate_code_block(code_content):
+                save_to_file(code_content, script_output)
+                click.echo(f"Script saved to {script_output}")
+            else:
+                click.echo("Extracted code block appears invalid.")
+        else:
+            # Multiple code blocks case
+            valid_blocks = [block for block in code_blocks if validate_code_block(block)]
+
+            if not valid_blocks:
+                click.echo("No valid code blocks found in the response.")
+                return
+
+            if len(valid_blocks) == 1:
+                save_to_file(valid_blocks[0], script_output)
+                click.echo(f"Script saved to {script_output}")
+            else:
+                # Handle multiple valid code blocks
+                base_path = script_output.parent
+                stem = script_output.stem
+                suffix = script_output.suffix
+
+                for i, block in enumerate(valid_blocks, 1):
+                    output_path = base_path / f"{stem}_{i}{suffix}"
+                    save_to_file(block, output_path)
+                    click.echo(f"Script part {i} saved to {output_path}")
+    except Exception as e:
+        click.echo(f"Error processing script output: {str(e)}")
 
 @click.command()
 @click.option('--api-key', help='Anthropic API Key (optional)')
@@ -84,29 +155,15 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[Pa
 
         if output:
             try:
-                with open(output, 'w', encoding='utf-8') as f:
-                    f.write(response)
+                save_to_file(response, output)
                 click.echo(f"Response saved to {output}")
             except Exception as e:
                 click.echo(f"Error saving response: {str(e)}")
         else:
             click.echo(f"Claude: {response}")
 
-        # Save script if it looks like code and script_output is specified
-        if script_output and "```" in response:
-            try:
-                # Extract code between triple backticks
-                code_blocks = response.split("```")
-                if len(code_blocks) > 1:
-                    # Get the code content (usually the second element)
-                    code_content = code_blocks[1]
-                    # Remove language identifier if present
-                    if '\n' in code_content:
-                        code_content = code_content.split('\n', 1)[1]
-                    save_to_file(code_content, script_output)
-                    click.echo(f"Script saved to {script_output}")
-            except Exception as e:
-                click.echo(f"Error saving script: {str(e)}")
+        if script_output:
+            handle_script_output(response, script_output)
         return
 
     # Interactive mode
@@ -121,21 +178,8 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[Pa
                 response = chat_session.send_message(user_input)
                 click.echo(f"Claude: {response}")
 
-                # Save script if it looks like code and script_output is specified
-                if script_output and "```" in response:
-                    try:
-                        # Extract code between triple backticks
-                        code_blocks = response.split("```")
-                        if len(code_blocks) > 1:
-                            # Get the code content (usually the second element)
-                            code_content = code_blocks[1]
-                            # Remove language identifier if present
-                            if '\n' in code_content:
-                                code_content = code_content.split('\n', 1)[1]
-                            save_to_file(code_content, script_output)
-                            click.echo(f"Script saved to {script_output}")
-                    except Exception as e:
-                        click.echo(f"Error saving script: {str(e)}")
+                if script_output:
+                    handle_script_output(response, script_output)
             except KeyboardInterrupt:
                 break
     except Exception as e:
