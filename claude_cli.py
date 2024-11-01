@@ -21,7 +21,7 @@ class ChatSession:
 
             # Add script return instruction if script output is requested
             if '--script-output' in sys.argv:
-                full_prompt += "\n\nPlease return the complete script in its entirety within triple backticks (```). Include all necessary imports, functions, and code blocks."
+                full_prompt += "\n\nPlease return the complete script in its entirety within triple backticks (```). If the script contains backticks, please escape them or use alternative delimiters."
 
             if self.preserve_context and self.conversation_history:
                 full_prompt = "\n".join(self.conversation_history + [full_prompt])
@@ -38,17 +38,40 @@ class ChatSession:
             return f"An error occurred: {str(e)}"
 
 def extract_code_blocks(text: str) -> List[str]:
-    """Extract code blocks from text containing triple backticks."""
-    # Pattern matches content between triple backticks, including language identifier
-    pattern = r"```(?:\w*\n)?(.*?)```"
-    # re.DOTALL allows matching across multiple lines
-    matches = re.findall(pattern, text, re.DOTALL)
-    # Strip leading/trailing whitespace from each block
-    return [block.strip() for block in matches]
+    """
+    Extract code blocks from text containing triple backticks.
+    Handles nested backticks and alternative delimiters.
+    """
+    # First attempt: standard triple backticks
+    standard_pattern = r"```(?:\w*\n)?(.*?)```"
+    matches = re.findall(standard_pattern, text, re.DOTALL)
+
+    if matches:
+        return [block.strip() for block in matches]
+
+    # Second attempt: escaped backticks or alternative delimiters
+    alternative_patterns = [
+        r"'''(.*?)'''",  # Triple single quotes
+        r'"""(.*?)"""',  # Triple double quotes
+        r"\{\{\{(.*?)\}\}\}",  # Triple curly braces
+        r"```([^`]*(?:`[^`]+)*?)```"  # More permissive backtick pattern
+    ]
+
+    for pattern in alternative_patterns:
+        matches = re.findall(pattern, text, re.DOTALL)
+        if matches:
+            return [block.strip() for block in matches]
+
+    # If no matches found with any pattern, try to extract any code-like content
+    fallback_pattern = r"(?:^|\n)(?:def |class |import |from \w+ import).*?(?=\n\n|\Z)"
+    matches = re.findall(fallback_pattern, text, re.DOTALL | re.MULTILINE)
+    return [block.strip() for block in matches] if matches else []
 
 def validate_code_block(code: str) -> bool:
-    """Basic validation of code block."""
-    if not code:
+    """
+    Enhanced validation of code block with additional checks.
+    """
+    if not code or len(code.strip()) < 10:  # Minimum meaningful code length
         return False
 
     # Check for some basic Python syntax indicators
@@ -61,10 +84,38 @@ def validate_code_block(code: str) -> bool:
         'return ',
         'if ',
         'for ',
-        'while '
+        'while ',
+        'try:',
+        'with ',
+        '@',  # decorators
+        'lambda'
     ]
 
-    return any(indicator in code for indicator in basic_indicators)
+    # Check for common Python keywords
+    if not any(indicator in code for indicator in basic_indicators):
+        return False
+
+    # Check for balanced brackets and parentheses
+    brackets = {'(': ')', '[': ']', '{': '}'}
+    stack = []
+
+    for char in code:
+        if char in brackets.keys():
+            stack.append(char)
+        elif char in brackets.values():
+            if not stack:
+                return False
+            if char != brackets[stack.pop()]:
+                return False
+
+    if stack:  # Unbalanced brackets
+        return False
+
+    # Check for valid indentation (at least one indented block)
+    lines = code.split('\n')
+    has_indentation = any(line.startswith((' ', '\t')) for line in lines)
+
+    return has_indentation
 
 def process_file(file_path: Path) -> str:
     try:
@@ -75,13 +126,19 @@ def process_file(file_path: Path) -> str:
 
 def save_to_file(content: str, file_path: Path) -> None:
     try:
+        # Ensure the directory exists
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Replace any potentially problematic backticks
+        sanitized_content = content.replace('```', '').strip()
+
         with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+            f.write(sanitized_content)
     except Exception as e:
         click.echo(f"Error saving to file: {str(e)}")
 
 def handle_script_output(response: str, script_output: Path) -> None:
-    """Handle extracting and saving code blocks from the response."""
+    """Handle extracting and saving code blocks from the response with improved backtick handling."""
     try:
         code_blocks = extract_code_blocks(response)
 
