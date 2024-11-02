@@ -4,6 +4,7 @@ import click
 from anthropic import Anthropic
 import re
 import sys
+import readline
 from colorama import init, Fore, Style
 
 # Initialize colorama
@@ -102,6 +103,10 @@ def get_multiline_input() -> str:
 @click.option('--code-file', type=click.Path(), help='Path to save generated code/content (strips markdown)')
 def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[str],
          prompt: Optional[str], output: Optional[str], code_file: Optional[str]) -> None:
+    # Configure readline
+    readline.parse_and_bind('tab: complete')
+    readline.parse_and_bind('set editing-mode emacs')
+    
     anthropic_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
     if not anthropic_key:
         anthropic_key = click.prompt('Please enter your Anthropic API Key', hide_input=True)
