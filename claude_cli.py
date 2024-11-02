@@ -12,7 +12,7 @@ class ChatSession:
         self.preserve_context = preserve_context
         self.conversation_history: List[str] = []
 
-    def send_message(self, message: str, context: Optional[str] = None, code_output: bool = False) -> str:
+    def send_message(self, message: str, context: Optional[str] = None, code_output: bool = False, stream: bool = False) -> str:
         try:
             full_prompt = message
             if context:
@@ -24,11 +24,24 @@ class ChatSession:
             if self.preserve_context and self.conversation_history:
                 full_prompt = "\n".join(self.conversation_history + [full_prompt])
 
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                messages=[{"role": "user", "content": full_prompt}])
-            ai_response = response.content[0].text
+            if stream:
+                response_text = ""
+                with self.client.messages.stream(
+                    model=self.model,
+                    max_tokens=4096,
+                    messages=[{"role": "user", "content": full_prompt}]
+                ) as stream:
+                    for text in stream.text_stream:
+                        response_text += text
+                        print(text, end='', flush=True)
+                    print()  # New line after stream ends
+                ai_response = response_text
+            else:
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4096,
+                    messages=[{"role": "user", "content": full_prompt}])
+                ai_response = response.content[0].text
 
             if code_output:
                 # Remove markdown code blocks if present
@@ -141,8 +154,8 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[st
                         save_to_file(response, filename)
                         click.echo(f"Code saved to {filename}")
                 else:
-                    response = chat_session.send_message(user_input)
-                    click.echo(f"Claude: {response}")
+                    print("Claude: ", end='', flush=True)
+                    response = chat_session.send_message(user_input, stream=True)
             except KeyboardInterrupt:
                 break
     except Exception as e:
