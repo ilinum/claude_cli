@@ -4,6 +4,10 @@ import click
 from anthropic import Anthropic
 import re
 import sys
+from colorama import init, Fore, Style
+
+# Initialize colorama
+init()
 
 class ChatSession:
     def __init__(self, api_key: str, model: str, preserve_context: bool) -> None:
@@ -69,7 +73,7 @@ def save_to_file(content: str, file_path: str) -> None:
 
 def get_multiline_input() -> str:
     """Get multiline input from the user until they press Ctrl+D/Z or enter two blank lines."""
-    click.echo("Enter your message (press Ctrl+D or Ctrl+Z to finish, or enter two blank lines):")
+    click.echo(f"{Fore.YELLOW}Enter your message (press Ctrl+D or Ctrl+Z to finish, or enter two blank lines):{Style.RESET_ALL}")
     lines = []
     blank_line_count = 0
     
@@ -129,15 +133,15 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[st
         return
 
     # Interactive mode
-    click.echo(f"Welcome to Anthropic CLI Chat (Model: {model})")
-    click.echo("Type 'exit' or press Ctrl+C to quit.")
-    click.echo("Type '/m' for multiline input mode")
-    click.echo("To save code, use: /save <filename>")
+    click.echo(f"{Fore.CYAN}Welcome to Anthropic CLI Chat (Model: {model}){Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}Type 'exit' or press Ctrl+C to quit.{Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}Type '/m' for multiline input mode{Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}To save code, use: /save <filename>{Style.RESET_ALL}")
 
     try:
         while True:
             try:
-                user_input = input("You: ")
+                user_input = input(f"{Fore.BLUE}You: {Style.RESET_ALL}")
                 if user_input.lower() in ['exit', 'quit', 'q']:
                     break
 
@@ -152,15 +156,15 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[st
                     if prompt:
                         response = chat_session.send_message(prompt, code_output=True)
                         save_to_file(response, filename)
-                        click.echo(f"Code saved to {filename}")
+                        click.echo(f"{Fore.GREEN}Code saved to {filename}{Style.RESET_ALL}")
                 else:
-                    print("Claude: ", end='', flush=True)
+                    print(f"{Fore.MAGENTA}Claude: {Style.RESET_ALL}", end='', flush=True)
                     response = chat_session.send_message(user_input, stream=True)
             except KeyboardInterrupt:
                 break
     except Exception as e:
-        click.echo(f"An unexpected error occurred: {str(e)}")
-    click.echo("Goodbye!")
+        click.echo(f"{Fore.RED}An unexpected error occurred: {str(e)}{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}Goodbye!{Style.RESET_ALL}")
 
 if __name__ == '__main__':
     main()
