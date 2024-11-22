@@ -4,8 +4,9 @@ import click
 from anthropic import Anthropic
 import re
 import sys
-import readline
-from colorama import init, Fore, Style
+from prompt_toolkit import PromptSession
+from prompt_toolkit.styles import Style
+from colorama import init, Fore, Style as ColoramaStyle
 from datetime import datetime
 import json
 
@@ -14,12 +15,18 @@ init()
 
 HISTORY_FILE = os.path.expanduser('~/.claudehistory')
 
+prompt_style = Style.from_dict({
+    'prompt': '#0000FF',  # Blue
+    'input': '#FFFFFF',   # White
+})
+
 class ChatSession:
     def __init__(self, api_key: str, model: str, preserve_context: bool) -> None:
         self.client = Anthropic(api_key=api_key)
         self.model = model
         self.preserve_context = preserve_context
         self.conversation_history: List[str] = []
+        self.session = PromptSession(style=prompt_style)
 
     def send_message(self, message: str, context: Optional[str] = None, code_output: bool = False, stream: bool = False) -> str:
         try:
@@ -99,15 +106,15 @@ def save_to_history(prompt: str, response: str, model: str) -> None:
     except Exception as e:
         click.echo(f"Error saving to history: {str(e)}")
 
-def get_multiline_input() -> str:
+def get_multiline_input(session: PromptSession) -> str:
     """Get multiline input from the user until they press Ctrl+D/Z or enter two blank lines."""
-    click.echo(f"{Fore.YELLOW}Enter your message (press Ctrl+D or Ctrl+Z to finish, or enter two blank lines):{Style.RESET_ALL}")
+    click.echo(f"{Fore.YELLOW}Enter your message (press Ctrl+D or Ctrl+Z to finish, or enter two blank lines):{ColoramaStyle.RESET_ALL}")
     lines = []
     blank_line_count = 0
     
     while True:
         try:
-            line = input()
+            line = session.prompt('... ')
             if not line:
                 blank_line_count += 1
                 if blank_line_count >= 2:
@@ -130,9 +137,6 @@ def get_multiline_input() -> str:
 @click.option('--code-file', type=click.Path(), help='Path to save generated code/content (strips markdown)')
 def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[str],
          prompt: Optional[str], output: Optional[str], code_file: Optional[str]) -> None:
-    # Configure readline
-    readline.parse_and_bind('tab: complete')
-    readline.parse_and_bind('set editing-mode emacs')
     
     anthropic_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
     if not anthropic_key:
@@ -165,38 +169,38 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[st
         return
 
     # Interactive mode
-    click.echo(f"{Fore.CYAN}Welcome to Anthropic CLI Chat (Model: {model}){Style.RESET_ALL}")
-    click.echo(f"{Fore.GREEN}Type 'exit' or press Ctrl+C to quit.{Style.RESET_ALL}")
-    click.echo(f"{Fore.GREEN}Type '/m' for multiline input mode{Style.RESET_ALL}")
-    click.echo(f"{Fore.GREEN}To save code, use: /save <filename>{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}Welcome to Anthropic CLI Chat (Model: {model}){ColoramaStyle.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}Type 'exit' or press Ctrl+C to quit.{ColoramaStyle.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}Type '/m' for multiline input mode{ColoramaStyle.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}To save code, use: /save <filename>{ColoramaStyle.RESET_ALL}")
 
     try:
         while True:
             try:
-                user_input = input(f"{Fore.BLUE}You: {Style.RESET_ALL}")
+                user_input = chat_session.session.prompt(f"{Fore.BLUE}You: {ColoramaStyle.RESET_ALL}")
                 if user_input.lower() in ['exit', 'quit', 'q']:
                     break
 
                 if user_input == '/m':
-                    user_input = get_multiline_input()
+                    user_input = get_multiline_input(chat_session.session)
                     if not user_input:  # Skip empty input
                         continue
 
                 if user_input.startswith('/save '):
                     filename = user_input.split(' ', 1)[1]
-                    prompt = get_multiline_input()
+                    prompt = get_multiline_input(chat_session.session)
                     if prompt:
                         response = chat_session.send_message(prompt, code_output=True)
                         save_to_file(response, filename)
-                        click.echo(f"{Fore.GREEN}Code saved to {filename}{Style.RESET_ALL}")
+                        click.echo(f"{Fore.GREEN}Code saved to {filename}{ColoramaStyle.RESET_ALL}")
                 else:
-                    print(f"{Fore.MAGENTA}Claude: {Style.RESET_ALL}", end='', flush=True)
+                    print(f"{Fore.MAGENTA}Claude: {ColoramaStyle.RESET_ALL}", end='', flush=True)
                     response = chat_session.send_message(user_input, stream=True)
             except KeyboardInterrupt:
                 break
     except Exception as e:
-        click.echo(f"{Fore.RED}An unexpected error occurred: {str(e)}{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}Goodbye!{Style.RESET_ALL}")
+        click.echo(f"{Fore.RED}An unexpected error occurred: {str(e)}{ColoramaStyle.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}Goodbye!{ColoramaStyle.RESET_ALL}")
 
 if __name__ == '__main__':
     main()
