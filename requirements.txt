@@ -2,3 +2,4 @@ anthropic>=0.18.1
 click>=8.1.7
 typing-extensions>=4.5.0
 colorama>=0.4.6
+promptkit>=3.0.0
