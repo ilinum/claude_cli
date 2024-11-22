@@ -177,7 +177,7 @@ def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[st
     try:
         while True:
             try:
-                user_input = chat_session.session.prompt(f"{Fore.BLUE}You: {ColoramaStyle.RESET_ALL}")
+                user_input = chat_session.session.prompt("You: ")
                 if user_input.lower() in ['exit', 'quit', 'q']:
                     break
 
