@@ -6,9 +6,13 @@ import re
 import sys
 import readline
 from colorama import init, Fore, Style
+from datetime import datetime
+import json
 
 # Initialize colorama
 init()
+
+HISTORY_FILE = os.path.expanduser('~/.claudehistory')
 
 class ChatSession:
     def __init__(self, api_key: str, model: str, preserve_context: bool) -> None:
@@ -54,6 +58,10 @@ class ChatSession:
 
             if self.preserve_context:
                 self.conversation_history.extend([full_prompt, ai_response])
+                
+            # Save to history
+            save_to_history(message, ai_response, self.model)
+            
             return ai_response
         except Exception as e:
             return f"An error occurred: {str(e)}"
@@ -71,6 +79,25 @@ def save_to_file(content: str, file_path: str) -> None:
             f.write(content)
     except Exception as e:
         click.echo(f"Error saving to file: {str(e)}")
+
+def save_to_history(prompt: str, response: str, model: str) -> None:
+    try:
+        history = []
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                history = json.load(f)
+        
+        history.append({
+            'timestamp': datetime.now().isoformat(),
+            'model': model,
+            'prompt': prompt,
+            'response': response
+        })
+        
+        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        click.echo(f"Error saving to history: {str(e)}")
 
 def get_multiline_input() -> str:
     """Get multiline input from the user until they press Ctrl+D/Z or enter two blank lines."""
