@@ -31,15 +31,23 @@ class ChatSession:
 
     def send_message(self, message: str, context: Optional[str] = None, code_output: bool = False, stream: bool = False) -> str:
         try:
-            full_prompt = message
             if context:
                 full_prompt = f"Context:\n{context}\n\nQuestion/Instruction:\n{message}"
+            else:
+                full_prompt = message
 
             if code_output:
                 full_prompt = f"{full_prompt}\n\nPlease provide the complete code file/content. Do not include any explanations or markdown formatting - return only the actual file content that should be saved."
 
-            if self.preserve_context and self.conversation_history:
-                full_prompt = "\n".join(self.conversation_history + [full_prompt])
+            if self.preserve_context:
+                if context:
+                    # When using context, only add the response to history
+                    if self.conversation_history:
+                        full_prompt = "\n".join(self.conversation_history + [full_prompt])
+                else:
+                    # For regular messages, add both prompt and response
+                    if self.conversation_history:
+                        full_prompt = "\n".join(self.conversation_history + [full_prompt])
 
             if self.debug:
                 click.echo(f"\n{Fore.YELLOW}Debug - Sending request:{ColoramaStyle.RESET_ALL}")
@@ -70,7 +78,12 @@ class ChatSession:
                 ai_response = re.sub(r'^```[\w]*\n|```$', '', ai_response, flags=re.MULTILINE).strip()
 
             if self.preserve_context:
-                self.conversation_history.extend([full_prompt, ai_response])
+                if context:
+                    # Only add response to history when using context
+                    self.conversation_history.append(ai_response)
+                else:
+                    # Add both prompt and response for regular messages
+                    self.conversation_history.extend([message, ai_response])
                 
             # Save to history
             save_to_history(message, ai_response, self.model)
