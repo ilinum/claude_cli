@@ -21,12 +21,13 @@ prompt_style = Style.from_dict({
 })
 
 class ChatSession:
-    def __init__(self, api_key: str, model: str, preserve_context: bool) -> None:
+    def __init__(self, api_key: str, model: str, preserve_context: bool, debug: bool = False) -> None:
         self.client = Anthropic(api_key=api_key)
         self.model = model
         self.preserve_context = preserve_context
         self.conversation_history: List[str] = []
         self.session = PromptSession(style=prompt_style)
+        self.debug = debug
 
     def send_message(self, message: str, context: Optional[str] = None, code_output: bool = False, stream: bool = False) -> str:
         try:
@@ -39,6 +40,11 @@ class ChatSession:
 
             if self.preserve_context and self.conversation_history:
                 full_prompt = "\n".join(self.conversation_history + [full_prompt])
+
+            if self.debug:
+                click.echo(f"\n{Fore.YELLOW}Debug - Sending request:{ColoramaStyle.RESET_ALL}")
+                click.echo(f"{Fore.YELLOW}Model: {self.model}{ColoramaStyle.RESET_ALL}")
+                click.echo(f"{Fore.YELLOW}Prompt:{ColoramaStyle.RESET_ALL}\n{full_prompt}\n")
 
             if stream:
                 response_text = ""
@@ -135,15 +141,16 @@ def get_multiline_input(session: PromptSession) -> str:
 @click.option('--prompt', help='Prompt to send to Claude')
 @click.option('--output', type=click.Path(), help='Path to output file for saving responses')
 @click.option('--code-file', type=click.Path(), help='Path to save generated code/content (strips markdown)')
+@click.option('--debug', is_flag=True, help='Enable debug output')
 def main(api_key: Optional[str], model: str, no_context: bool, file: Optional[str],
-         prompt: Optional[str], output: Optional[str], code_file: Optional[str]) -> None:
+         prompt: Optional[str], output: Optional[str], code_file: Optional[str], debug: bool) -> None:
     
     anthropic_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
     if not anthropic_key:
         anthropic_key = click.prompt('Please enter your Anthropic API Key', hide_input=True)
 
     preserve_context = not no_context
-    chat_session = ChatSession(api_key=anthropic_key, model=model, preserve_context=preserve_context)
+    chat_session = ChatSession(api_key=anthropic_key, model=model, preserve_context=preserve_context, debug=debug)
 
     file_content = None
     if file:
